@@ -1,4 +1,3 @@
-```markdown
 # Shodan Search GUI
 
 Shodan Search GUI is a Python-based application that leverages the Shodan API to perform searches and visualize data from Shodan. The application provides an intuitive graphical user interface (GUI) for conducting advanced searches, viewing detailed host information, exporting results, and visualizing data using charts and maps.
