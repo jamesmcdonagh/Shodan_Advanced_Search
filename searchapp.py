@@ -36,10 +36,11 @@ def search_shodan(query, country_code, port, service):
             org_str = result.get("org", "Unknown Organization")
             ip_str = result["ip_str"]
             start = result_text.index(tk.END)
-            result_text.insert(tk.END, f'Organization: {org_str}\n\n')
+            result_text.insert(tk.END, f'{org_str}\n\n')
             end = result_text.index(tk.END)
             result_text.tag_add(ip_str, start, end)
             result_text.tag_config(ip_str, foreground="blue", underline=True)
+            # Ensure the correct IP is passed by using a closure
             result_text.tag_bind(ip_str, "<Button-1>", lambda e, ip=ip_str: show_host_info(ip))
     except shodan.APIError as e:
         messagebox.showerror("Error", f'Shodan API error: {e}')
@@ -52,7 +53,7 @@ def on_search():
     search_shodan(query, country_code, port, service)
 
 def show_host_info(ip):
-    def fetch_host_info():
+    def fetch_host_info(ip):
         try:
             host = api.host(ip)
             info = f'IP: {host["ip_str"]}\nOrganization: {host.get("org", "n/a")}\nOperating System: {host.get("os", "n/a")}\n\n'
@@ -87,7 +88,7 @@ def show_host_info(ip):
     for widget in root.winfo_children():
         if isinstance(widget, tk.Toplevel):
             widget.destroy()
-    fetch_host_info()
+    fetch_host_info(ip)
 
 def export_results():
     results_text = result_text.get(1.0, tk.END)
