@@ -12,8 +12,12 @@ if not SHODAN_API_KEY:
 # Initialize the Shodan API client
 api = shodan.Shodan(SHODAN_API_KEY)
 
-def search_shodan(query):
+def search_shodan(query, country_code):
     try:
+        # Append the country filter to the query if a country is selected
+        if country_code:
+            query += f' country:{country_code}'
+        
         results = api.search(query)
         result_text.delete(1.0, tk.END)  # Clear previous results
         result_text.insert(tk.END, f'Results found: {results["total"]}\n\n')
@@ -24,7 +28,8 @@ def search_shodan(query):
 
 def on_search():
     query = search_var.get()
-    search_shodan(query)
+    country_code = country_var.get()
+    search_shodan(query, country_code)
 
 # Create main window
 root = tk.Tk()
@@ -39,6 +44,18 @@ search_var = tk.StringVar()
 search_dropdown = ttk.Combobox(root, textvariable=search_var)
 search_dropdown['values'] = ("apache", "nginx", "ssh", "ftp", "telnet", "http")
 search_dropdown.pack(pady=5)
+
+# Create country filter dropdown
+country_label = tk.Label(root, text="Country Code:")
+country_label.pack(pady=5)
+
+country_var = tk.StringVar()
+country_dropdown = ttk.Combobox(root, textvariable=country_var)
+country_dropdown['values'] = (
+    "",  # Allow for no country filter
+    "US", "CA", "GB", "DE", "FR", "JP", "CN", "RU", "BR", "IN"  # Add more as needed
+)
+country_dropdown.pack(pady=5)
 
 # Create search button
 search_button = tk.Button(root, text="Search", command=on_search)
