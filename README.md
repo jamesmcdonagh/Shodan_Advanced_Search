@@ -1,5 +1,3 @@
-Here's the formatted text for your README file, ready to be copied and pasted:
-
 ```markdown
 # Shodan Search GUI
 
