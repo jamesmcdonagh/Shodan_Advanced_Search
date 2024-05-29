@@ -19,7 +19,13 @@ if not SHODAN_API_KEY:
 api = shodan.Shodan(SHODAN_API_KEY)
 geolocator = Nominatim(user_agent="shodan_gui")
 
-def search_shodan(query, country_code, port, service):
+# Global variable to keep track of the current page
+current_page = 1
+results_per_page = 10
+total_results = 0
+
+def search_shodan(query, country_code, port, service, page=1):
+    global total_results
     try:
         # Build the search query with additional filters
         if country_code:
@@ -29,28 +35,41 @@ def search_shodan(query, country_code, port, service):
         if service:
             query += f' {service}'
         
-        results = api.search(query)
+        results = api.search(query, page=page)
+        total_results = results['total']
         result_text.delete(1.0, tk.END)  # Clear previous results
-        result_text.insert(tk.END, f'Results found: {results["total"]}\n\n')
+        result_text.insert(tk.END, f'Results found: {total_results}\n\n')
         for result in results['matches']:
             org_str = result.get("org", "Unknown Organization")
+            city = result.get("location", {}).get("city", "Unknown City")
+            state = result.get("location", {}).get("region_code", "Unknown State")
             ip_str = result["ip_str"]
             start = result_text.index(tk.END)
-            result_text.insert(tk.END, f'{org_str}\n\n')
+            result_text.insert(tk.END, f'{org_str}\n{city}, {state}\n\n')
             end = result_text.index(tk.END)
             result_text.tag_add(ip_str, start, end)
             result_text.tag_config(ip_str, foreground="blue", underline=True)
-            # Ensure the correct IP is passed by using a closure
             result_text.tag_bind(ip_str, "<Button-1>", lambda e, ip=ip_str: show_host_info(ip))
+        
+        update_pagination_controls()
     except shodan.APIError as e:
         messagebox.showerror("Error", f'Shodan API error: {e}')
 
+def update_pagination_controls():
+    global current_page, total_results, results_per_page
+    total_pages = (total_results + results_per_page - 1) // results_per_page
+    pagination_label.config(text=f"Page {current_page} of {total_pages}")
+    prev_button.config(state=tk.NORMAL if current_page > 1 else tk.DISABLED)
+    next_button.config(state=tk.NORMAL if current_page < total_pages else tk.DISABLED)
+
 def on_search():
+    global current_page
+    current_page = 1
     query = search_var.get()
     country_code = country_var.get()
     port = port_var.get()
     service = service_var.get()
-    search_shodan(query, country_code, port, service)
+    search_shodan(query, country_code, port, service, page=current_page)
 
 def show_host_info(ip):
     def fetch_host_info(ip):
@@ -131,6 +150,27 @@ def load_search():
         port_var.set(search_query.get("port", ""))
         service_var.set(search_query.get("service", ""))
 
+def prev_page():
+    global current_page
+    if current_page > 1:
+        current_page -= 1
+        query = search_var.get()
+        country_code = country_var.get()
+        port = port_var.get()
+        service = service_var.get()
+        search_shodan(query, country_code, port, service, page=current_page)
+
+def next_page():
+    global current_page
+    total_pages = (total_results + results_per_page - 1) // results_per_page
+    if current_page < total_pages:
+        current_page += 1
+        query = search_var.get()
+        country_code = country_var.get()
+        port = port_var.get()
+        service = service_var.get()
+        search_shodan(query, country_code, port, service, page=current_page)
+
 # Create main window
 root = tk.Tk()
 root.title("Shodan Search GUI")
@@ -193,6 +233,19 @@ load_button.pack(pady=5)
 # Result text box
 result_text = tk.Text(frame_right, wrap=tk.WORD, height=25, width=80)
 result_text.pack(pady=10, fill=tk.BOTH, expand=True)
+
+# Pagination controls
+pagination_frame = tk.Frame(frame_right)
+pagination_frame.pack(pady=5)
+
+prev_button = tk.Button(pagination_frame, text="Previous", command=prev_page)
+prev_button.pack(side=tk.LEFT, padx=5)
+
+pagination_label = tk.Label(pagination_frame, text="")
+pagination_label.pack(side=tk.LEFT, padx=5)
+
+next_button = tk.Button(pagination_frame, text="Next", command=next_page)
+next_button.pack(side=tk.LEFT, padx=5)
 
 # Run the application
 root.mainloop()
