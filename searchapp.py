@@ -8,6 +8,8 @@ import folium
 from geopy.geocoders import Nominatim
 from io import BytesIO
 from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # Retrieve the Shodan API key from environment variables
 SHODAN_API_KEY = os.getenv('SHODAN_API_KEY')
@@ -23,9 +25,10 @@ geolocator = Nominatim(user_agent="shodan_gui")
 current_page = 1
 results_per_page = 10
 total_results = 0
+results = []
 
-def search_shodan(query, country_code, port, service, page=1):
-    global total_results
+def search_shodan(query, country_code, port, service, hostname, vuln, page=1):
+    global total_results, results
     try:
         # Build the search query with additional filters
         if country_code:
@@ -34,6 +37,10 @@ def search_shodan(query, country_code, port, service, page=1):
             query += f' port:{port}'
         if service:
             query += f' {service}'
+        if hostname:
+            query += f' hostname:{hostname}'
+        if vuln:
+            query += f' vuln:{vuln}'
         
         results = api.search(query, page=page)
         total_results = results['total']
@@ -69,7 +76,9 @@ def on_search():
     country_code = country_var.get()
     port = port_var.get()
     service = service_var.get()
-    search_shodan(query, country_code, port, service, page=current_page)
+    hostname = hostname_var.get()
+    vuln = vuln_var.get()
+    search_shodan(query, country_code, port, service, hostname, vuln, page=current_page)
 
 def show_host_info(ip):
     def fetch_host_info(ip):
@@ -94,6 +103,7 @@ def show_host_info(ip):
                 folium.Marker([lat, lon], popup=ip).add_to(map)
                 map_data = BytesIO()
                 map.save(map_data, close_file=False)
+                map_data.seek(0)
                 map_image = Image.open(map_data)
                 map_photo = ImageTk.PhotoImage(map_image)
                 map_label = tk.Label(info_window, image=map_photo)
@@ -132,7 +142,9 @@ def save_search():
         "query": search_var.get(),
         "country": country_var.get(),
         "port": port_var.get(),
-        "service": service_var.get()
+        "service": service_var.get(),
+        "hostname": hostname_var.get(),
+        "vuln": vuln_var.get()
     }
     file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
     if file_path:
@@ -149,6 +161,8 @@ def load_search():
         country_var.set(search_query.get("country", ""))
         port_var.set(search_query.get("port", ""))
         service_var.set(search_query.get("service", ""))
+        hostname_var.set(search_query.get("hostname", ""))
+        vuln_var.set(search_query.get("vuln", ""))
 
 def prev_page():
     global current_page
@@ -158,7 +172,9 @@ def prev_page():
         country_code = country_var.get()
         port = port_var.get()
         service = service_var.get()
-        search_shodan(query, country_code, port, service, page=current_page)
+        hostname = hostname_var.get()
+        vuln = vuln_var.get()
+        search_shodan(query, country_code, port, service, hostname, vuln, page=current_page)
 
 def next_page():
     global current_page
@@ -169,12 +185,83 @@ def next_page():
         country_code = country_var.get()
         port = port_var.get()
         service = service_var.get()
-        search_shodan(query, country_code, port, service, page=current_page)
+        hostname = hostname_var.get()
+        vuln = vuln_var.get()
+        search_shodan(query, country_code, port, service, hostname, vuln, page=current_page)
+
+def show_map():
+    if not results:
+        messagebox.showwarning("Warning", "No results to show on map.")
+        return
+
+    map_window = tk.Toplevel(root)
+    map_window.title("Geographical Distribution of Search Results")
+    map_center = [0, 0]
+    result_map = folium.Map(location=map_center, zoom_start=2)
+
+    for result in results['matches']:
+        lat = result.get("location", {}).get("latitude")
+        lon = result.get("location", {}).get("longitude")
+        if lat and lon:
+            org_str = result.get("org", "Unknown Organization")
+            folium.Marker([lat, lon], popup=org_str).add_to(result_map)
+
+    map_data = BytesIO()
+    result_map.save(map_data, close_file=False)
+    map_data.seek(0)
+    map_image = Image.open(map_data)
+    map_photo = ImageTk.PhotoImage(map_image)
+    map_label = tk.Label(map_window, image=map_photo)
+    map_label.image = map_photo  # Keep a reference to avoid garbage collection
+    map_label.pack(pady=10)
+
+def show_graph():
+    if not results:
+        messagebox.showwarning("Warning", "No data to display.")
+        return
+
+    services = {}
+    countries = {}
+    ports = {}
+
+    for result in results['matches']:
+        service = result.get("product", "Unknown Service")
+        country = result.get("location", {}).get("country_name", "Unknown Country")
+        port = result.get("port")
+
+        services[service] = services.get(service, 0) + 1
+        countries[country] = countries.get(country, 0) + 1
+        ports[port] = ports.get(port, 0) + 1
+
+    graph_window = tk.Toplevel(root)
+    graph_window.title("Graphical Representation of Data")
+
+    fig, ax = plt.subplots(3, 1, figsize=(10, 15))
+
+    ax[0].bar(services.keys(), services.values(), color='blue')
+    ax[0].set_title('Distribution of Services')
+    ax[0].set_xlabel('Services')
+    ax[0].set_ylabel('Count')
+
+    ax[1].bar(countries.keys(), countries.values(), color='green')
+    ax[1].set_title('Distribution of Countries')
+    ax[1].set_xlabel('Countries')
+    ax[1].set_ylabel('Count')
+
+    ax[2].bar(ports.keys(), ports.values(), color='red')
+    ax[2].set_title('Distribution of Ports')
+    ax[2].set_xlabel('Ports')
+    ax[2].set_ylabel('Count')
+
+    fig.tight_layout()
+    canvas = FigureCanvasTkAgg(fig, master=graph_window)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
 
 # Create main window
 root = tk.Tk()
 root.title("Shodan Search GUI")
-root.geometry("1000x600")
+root.geometry("1200x700")
 
 # Create a frame for the search criteria
 frame_left = tk.Frame(root)
@@ -218,6 +305,20 @@ service_var = tk.StringVar()
 service_entry = tk.Entry(frame_left, textvariable=service_var)
 service_entry.pack(pady=5)
 
+hostname_label = tk.Label(frame_left, text="Hostname:")
+hostname_label.pack(pady=5)
+
+hostname_var = tk.StringVar()
+hostname_entry = tk.Entry(frame_left, textvariable=hostname_var)
+hostname_entry.pack(pady=5)
+
+vuln_label = tk.Label(frame_left, text="Vulnerability:")
+vuln_label.pack(pady=5)
+
+vuln_var = tk.StringVar()
+vuln_entry = tk.Entry(frame_left, textvariable=vuln_var)
+vuln_entry.pack(pady=5)
+
 search_button = tk.Button(frame_left, text="Search", command=on_search)
 search_button.pack(pady=5)
 
@@ -229,6 +330,12 @@ save_button.pack(pady=5)
 
 load_button = tk.Button(frame_left, text="Load Search", command=load_search)
 load_button.pack(pady=5)
+
+map_button = tk.Button(frame_left, text="Show Map", command=show_map)
+map_button.pack(pady=5)
+
+graph_button = tk.Button(frame_left, text="Show Graph", command=show_graph)
+graph_button.pack(pady=5)
 
 # Result text box
 result_text = tk.Text(frame_right, wrap=tk.WORD, height=25, width=80)
