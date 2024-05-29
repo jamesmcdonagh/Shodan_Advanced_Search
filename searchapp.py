@@ -36,7 +36,7 @@ def search_shodan(query, country_code, port, service):
             org_str = result.get("org", "Unknown Organization")
             ip_str = result["ip_str"]
             start = result_text.index(tk.END)
-            result_text.insert(tk.END, f'Organization: {org_str}\nClick for details\n\n')
+            result_text.insert(tk.END, f'Organization: {org_str}\n\n')
             end = result_text.index(tk.END)
             result_text.tag_add(ip_str, start, end)
             result_text.tag_config(ip_str, foreground="blue", underline=True)
@@ -52,35 +52,42 @@ def on_search():
     search_shodan(query, country_code, port, service)
 
 def show_host_info(ip):
-    try:
-        host = api.host(ip)
-        info = f'IP: {host["ip_str"]}\nOrganization: {host.get("org", "n/a")}\nOperating System: {host.get("os", "n/a")}\n\n'
-        for item in host['data']:
-            info += f'Port: {item["port"]}\nBanner: {item["data"]}\n\n'
-        
-        # Show host info in a new window
-        info_window = tk.Toplevel(root)
-        info_window.title(f"Host Information - {ip}")
-        info_text = tk.Text(info_window, wrap=tk.WORD, height=20, width=80)
-        info_text.insert(tk.END, info)
-        info_text.pack(pady=10)
+    def fetch_host_info():
+        try:
+            host = api.host(ip)
+            info = f'IP: {host["ip_str"]}\nOrganization: {host.get("org", "n/a")}\nOperating System: {host.get("os", "n/a")}\n\n'
+            for item in host['data']:
+                info += f'Port: {item["port"]}\nBanner: {item["data"]}\n\n'
+            
+            # Show host info in a new window
+            info_window = tk.Toplevel(root)
+            info_window.title(f"Host Information - {ip}")
+            info_text = tk.Text(info_window, wrap=tk.WORD, height=20, width=80)
+            info_text.insert(tk.END, info)
+            info_text.pack(pady=10)
 
-        # Show map with host location
-        lat = host.get("location", {}).get("latitude")
-        lon = host.get("location", {}).get("longitude")
-        if lat and lon:
-            map = folium.Map(location=[lat, lon], zoom_start=13)
-            folium.Marker([lat, lon], popup=ip).add_to(map)
-            map_data = BytesIO()
-            map.save(map_data, close_file=False)
-            map_image = Image.open(map_data)
-            map_photo = ImageTk.PhotoImage(map_image)
-            map_label = tk.Label(info_window, image=map_photo)
-            map_label.image = map_photo  # Keep a reference to avoid garbage collection
-            map_label.pack(pady=10)
+            # Show map with host location
+            lat = host.get("location", {}).get("latitude")
+            lon = host.get("location", {}).get("longitude")
+            if lat and lon:
+                map = folium.Map(location=[lat, lon], zoom_start=13)
+                folium.Marker([lat, lon], popup=ip).add_to(map)
+                map_data = BytesIO()
+                map.save(map_data, close_file=False)
+                map_image = Image.open(map_data)
+                map_photo = ImageTk.PhotoImage(map_image)
+                map_label = tk.Label(info_window, image=map_photo)
+                map_label.image = map_photo  # Keep a reference to avoid garbage collection
+                map_label.pack(pady=10)
 
-    except shodan.APIError as e:
-        messagebox.showerror("Error", f'Shodan API error: {e}')
+        except shodan.APIError as e:
+            messagebox.showerror("Error", f'Shodan API error: {e}')
+
+    # Ensure only one window is opened
+    for widget in root.winfo_children():
+        if isinstance(widget, tk.Toplevel):
+            widget.destroy()
+    fetch_host_info()
 
 def export_results():
     results_text = result_text.get(1.0, tk.END)
